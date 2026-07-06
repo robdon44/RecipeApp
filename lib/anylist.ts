@@ -59,11 +59,16 @@ export async function pushToAnyList(items: ShoppingListItem[]): Promise<AnyListP
     }
     return { ok: true, listName: ANYLIST_LIST_NAME, pushed };
   } catch (err) {
+    let message = err instanceof Error ? err.message : String(err);
+    if (message.includes('401')) {
+      message +=
+        ' — AnyList rejected the email/password. Check ANYLIST_EMAIL/ANYLIST_PASSWORD, and make sure the account has a password set (Apple/Google sign-in accounts need one created via password reset).';
+    }
     return {
       ok: false,
       listName: ANYLIST_LIST_NAME,
       pushed: 0,
-      error: err instanceof Error ? err.message : String(err),
+      error: message,
     };
   } finally {
     try {
