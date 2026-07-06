@@ -23,7 +23,7 @@ declare module 'anylist' {
 
   export default class AnyList {
     constructor(options: AnyListOptions);
-    login(): Promise<void>;
+    login(connectWebSocket?: boolean): Promise<void>;
     getLists(): Promise<AnyListList[]>;
     getListByName(name: string): AnyListList | undefined;
     createItem(item: { name: string; quantity?: string; details?: string }): AnyListItem;

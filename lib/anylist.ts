@@ -28,7 +28,9 @@ export async function pushToAnyList(items: ShoppingListItem[]): Promise<AnyListP
 
   const client = new AnyList({ email, password, credentialsFile: null });
   try {
-    await client.login();
+    // false = skip the live-updates websocket; pointless for a one-shot
+    // serverless push and its browser-oriented dependency breaks there.
+    await client.login(false);
     await client.getLists();
     const list = client.getListByName(ANYLIST_LIST_NAME);
     if (!list) {
