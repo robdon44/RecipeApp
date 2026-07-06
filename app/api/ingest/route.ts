@@ -1,15 +1,22 @@
 import { NextResponse } from 'next/server';
 import { extractRecipe } from '@/lib/extract';
 import { storeRecipe, findBySourceUrl } from '@/lib/store';
+import { getSupabase } from '@/lib/supabase';
 
 export const maxDuration = 60;
 
-/** POST { url } → extract, store (§8). */
+/**
+ * POST { url, force? } → extract, store (§8).
+ * force=true deletes any existing copy first and re-ingests fresh
+ * (re-spends nutrition API quota — deliberate user action only).
+ */
 export async function POST(request: Request) {
   let url: string;
+  let force = false;
   try {
     const body = await request.json();
     url = typeof body?.url === 'string' ? body.url.trim() : '';
+    force = body?.force === true;
     new URL(url); // validate
   } catch {
     return NextResponse.json({ error: 'Provide a valid { url }' }, { status: 400 });
@@ -18,8 +25,12 @@ export async function POST(request: Request) {
   try {
     // Check dedupe before doing any extraction work or spending API quota.
     const existing = await findBySourceUrl(url);
-    if (existing) {
+    if (existing && !force) {
       return NextResponse.json({ recipeId: existing, deduped: true });
+    }
+    if (existing && force) {
+      const { error } = await getSupabase().from('recipes').delete().eq('id', existing);
+      if (error) throw new Error(`Failed to delete existing recipe: ${error.message}`);
     }
 
     const extracted = await extractRecipe(url);

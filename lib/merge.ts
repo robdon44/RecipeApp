@@ -29,16 +29,16 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/** Present summed base amounts in a friendly unit (g/kg, ml/l). */
+/** Present summed base amounts in a friendly unit (g/kg, ml/l), shopping-rounded. */
 function present(total: number, cls: UnitClass): { amount: number; unit: string } {
   if (cls === 'mass') {
     return total >= 1000
       ? { amount: round2(total / 1000), unit: 'kg' }
-      : { amount: round2(total), unit: 'g' };
+      : { amount: Math.round(total), unit: 'g' };
   }
   return total >= 1000
     ? { amount: round2(total / 1000), unit: 'l' }
-    : { amount: round2(total), unit: 'ml' };
+    : { amount: Math.round(total), unit: 'ml' };
 }
 
 export interface RecipePortion {

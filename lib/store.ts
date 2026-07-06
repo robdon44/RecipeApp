@@ -74,14 +74,27 @@ export async function storeRecipe(extracted: ExtractedRecipe): Promise<StoreResu
         unit_class: 'other' as const,
         raw_text: line,
       }))
-    : parsed.map((p) => ({
-        recipe_id: recipe.id,
-        canonical_name: canonicalName(p.name),
-        amount: p.amount,
-        unit: normalizeUnit(p.unit),
-        unit_class: unitClass(p.unit),
-        raw_text: p.rawText,
-      }));
+    : parsed.map((p) => {
+        // Solids measured by volume ("1 cup onion") are stored by weight when
+        // the provider reports grams — shopping lists want solids in g/kg,
+        // liquids in ml. raw_text still preserves the original line.
+        let amount = p.amount;
+        let unit = normalizeUnit(p.unit);
+        let cls = unitClass(p.unit);
+        if (cls === 'volume' && p.consistency === 'SOLID' && p.weightGrams) {
+          amount = Math.round(p.weightGrams * 100) / 100;
+          unit = 'g';
+          cls = 'mass';
+        }
+        return {
+          recipe_id: recipe.id,
+          canonical_name: canonicalName(p.name),
+          amount,
+          unit,
+          unit_class: cls,
+          raw_text: p.rawText,
+        };
+      });
 
   if (ingredientRows.length > 0) {
     const { error } = await supabase.from('ingredients').insert(ingredientRows);

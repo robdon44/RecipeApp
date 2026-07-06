@@ -63,6 +63,10 @@ export interface ParsedIngredient {
   amount: number | null;
   unit: string | null;
   rawText: string;
+  /** SOLID | LIQUID when the provider reports it. */
+  consistency: string | null;
+  /** Total weight in grams of this line's amount, when reported. */
+  weightGrams: number | null;
   calories: number | null;
   protein_g: number | null;
   carbs_g: number | null;

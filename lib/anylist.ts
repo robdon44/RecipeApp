@@ -46,16 +46,17 @@ export async function pushToAnyList(items: ShoppingListItem[]): Promise<AnyListP
     for (const item of items) {
       const quantity =
         item.amount !== null ? `${item.amount}${item.unit ? ' ' + item.unit : ''}` : undefined;
+      // Measurement goes in details too — AnyList doesn't always surface the
+      // quantity field in the list view, and details always shows.
+      const details = [quantity, item.note].filter(Boolean).join(' · ') || undefined;
       const existing = list.getItemByName(item.name);
       if (existing) {
         existing.checked = false;
         if (quantity) existing.quantity = quantity;
-        if (item.note) existing.details = item.note;
+        if (details) existing.details = details;
         await existing.save();
       } else {
-        await list.addItem(
-          client.createItem({ name: item.name, quantity, details: item.note })
-        );
+        await list.addItem(client.createItem({ name: item.name, quantity, details }));
       }
       pushed++;
     }

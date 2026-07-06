@@ -53,19 +53,31 @@ export async function parseIngredients(lines: string[]): Promise<ParsedIngredien
     amount?: number;
     unit?: string;
     original?: string;
-    nutrition?: { nutrients?: Array<{ name: string; amount: number }> };
+    consistency?: string;
+    nutrition?: {
+      nutrients?: Array<{ name: string; amount: number }>;
+      weightPerServing?: { amount?: number; unit?: string };
+    };
   }> = await res.json();
 
-  return parsed.map((p, i) => ({
-    name: p.name?.trim() || nonEmpty[i] || 'unknown',
-    amount: typeof p.amount === 'number' ? p.amount : null,
-    unit: p.unit?.trim() || null,
-    rawText: p.original?.trim() || nonEmpty[i] || '',
-    calories: nutrient(p.nutrition?.nutrients, 'Calories'),
-    protein_g: nutrient(p.nutrition?.nutrients, 'Protein'),
-    carbs_g: nutrient(p.nutrition?.nutrients, 'Carbohydrates'),
-    fat_g: nutrient(p.nutrition?.nutrients, 'Fat'),
-  }));
+  return parsed.map((p, i) => {
+    const weight = p.nutrition?.weightPerServing;
+    return {
+      name: p.name?.trim() || nonEmpty[i] || 'unknown',
+      amount: typeof p.amount === 'number' ? p.amount : null,
+      unit: p.unit?.trim() || null,
+      rawText: p.original?.trim() || nonEmpty[i] || '',
+      consistency: p.consistency?.toUpperCase() ?? null,
+      weightGrams:
+        weight?.unit === 'g' && typeof weight.amount === 'number' && weight.amount > 0
+          ? weight.amount
+          : null,
+      calories: nutrient(p.nutrition?.nutrients, 'Calories'),
+      protein_g: nutrient(p.nutrition?.nutrients, 'Protein'),
+      carbs_g: nutrient(p.nutrition?.nutrients, 'Carbohydrates'),
+      fat_g: nutrient(p.nutrition?.nutrients, 'Fat'),
+    };
+  });
 }
 
 /**

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import type { Ingredient, Nutrition, Recipe } from '@/lib/types';
+import ReimportButton from './ReimportButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +45,8 @@ export default async function RecipePage({
               >
                 source
               </a>
+              {' '}
+              <ReimportButton url={recipe.source_url} />
             </>
           )}
         </p>
