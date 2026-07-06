@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import type { Ingredient, Nutrition, Recipe } from '@/lib/types';
 import ReimportButton from './ReimportButton';
+import DeleteButton from './DeleteButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,8 +50,19 @@ export default async function RecipePage({
               <ReimportButton url={recipe.source_url} />
             </>
           )}
+          {' '}
+          <DeleteButton recipeId={recipe.id} />
         </p>
       </div>
+
+      {recipe.image_url && (
+        // eslint-disable-next-line @next/next/no-img-element -- arbitrary external hosts; next/image needs per-domain config
+        <img
+          src={recipe.image_url}
+          alt={recipe.title}
+          className="max-h-80 w-full rounded-lg border border-neutral-200 object-cover"
+        />
+      )}
 
       {nutrition && (
         <div className="rounded-lg border border-neutral-200 bg-white p-4">

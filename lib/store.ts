@@ -58,6 +58,7 @@ export async function storeRecipe(extracted: ExtractedRecipe): Promise<StoreResu
       steps: extracted.steps,
       rating_value: extracted.ratingValue,
       review_count: extracted.reviewCount,
+      image_url: extracted.imageUrl,
     })
     .select('id')
     .single();

@@ -96,8 +96,18 @@ export default async function RecipeListPage({
             <li key={r.id}>
               <Link
                 href={`/recipe/${r.id}`}
-                className="block rounded-lg border border-neutral-200 bg-white p-4 hover:border-neutral-400"
+                className="block overflow-hidden rounded-lg border border-neutral-200 bg-white hover:border-neutral-400"
               >
+                {r.image_url && (
+                  // eslint-disable-next-line @next/next/no-img-element -- arbitrary external hosts; next/image needs per-domain config
+                  <img
+                    src={r.image_url}
+                    alt=""
+                    className="h-36 w-full object-cover"
+                    loading="lazy"
+                  />
+                )}
+                <div className="p-4">
                 <h2 className="font-medium">{r.title}</h2>
                 <p className="mt-1 text-xs text-neutral-500">
                   {r.base_servings} serving{r.base_servings === 1 ? '' : 's'}
@@ -114,6 +124,7 @@ export default async function RecipeListPage({
                     </span>
                   </p>
                 )}
+                </div>
               </Link>
             </li>
           );

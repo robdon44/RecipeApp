@@ -106,6 +106,29 @@ function parseServings(value: unknown): number {
   return 1;
 }
 
+/** JSON-LD image: string | [string] | ImageObject | [ImageObject] → URL */
+function parseJsonLdImage(value: unknown): string | null {
+  const first = Array.isArray(value) ? value[0] : value;
+  if (typeof first === 'string' && first.startsWith('http')) return first;
+  if (first && typeof first === 'object') {
+    const url = (first as JsonLdNode).url;
+    if (typeof url === 'string' && url.startsWith('http')) return url;
+  }
+  return null;
+}
+
+/** og:image / twitter:image meta tag → URL */
+export function extractOgImage(html: string): string | null {
+  const m = html.match(
+    /<meta[^>]+(?:property|name)\s*=\s*["'](?:og:image|twitter:image)["'][^>]+content\s*=\s*["']([^"']+)["']/i
+  ) ?? html.match(
+    // content= sometimes comes before property=
+    /<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]+(?:property|name)\s*=\s*["'](?:og:image|twitter:image)["']/i
+  );
+  const url = m?.[1]?.replace(/&amp;/g, '&').trim();
+  return url && url.startsWith('http') ? url : null;
+}
+
 /** "240 calories" | "4 g" | 240 → number */
 function parseNutrientValue(value: unknown): number | null {
   if (typeof value === 'number') return value;
@@ -152,6 +175,7 @@ export function extractFromJsonLd(html: string, url: string): ExtractedRecipe | 
         ? Math.round(parseNutrientValue(rating.reviewCount ?? rating.ratingCount)!)
         : null
       : null,
+    imageUrl: parseJsonLdImage(recipe.image) ?? extractOgImage(html),
     sourceNutrition:
       sourceNutrition && Object.values(sourceNutrition).some((v) => v !== null)
         ? sourceNutrition
@@ -273,6 +297,7 @@ export async function extractRecipe(url: string): Promise<ExtractedRecipe | null
     steps: llm.steps ?? [],
     ratingValue: null,
     reviewCount: null,
+    imageUrl: extractOgImage(html),
     sourceNutrition: null,
   };
 }

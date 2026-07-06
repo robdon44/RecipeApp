@@ -11,6 +11,7 @@ export interface Recipe {
   steps: string[];
   rating_value: number | null;
   review_count: number | null;
+  image_url: string | null;
   created_at: string;
 }
 
@@ -48,6 +49,7 @@ export interface ExtractedRecipe {
   steps: string[];
   ratingValue: number | null;
   reviewCount: number | null;
+  imageUrl: string | null;
   /** Nutrition provided by the source itself (per serving), if any. */
   sourceNutrition: {
     calories: number | null;

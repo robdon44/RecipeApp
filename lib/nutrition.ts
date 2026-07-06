@@ -97,6 +97,7 @@ export async function extractRecipeFromWebsite(url: string): Promise<ExtractedRe
   const data: {
     title?: string;
     servings?: number;
+    image?: string;
     extendedIngredients?: Array<{ original?: string }>;
     analyzedInstructions?: Array<{ steps?: Array<{ step?: string }> }>;
     instructions?: string;
@@ -128,6 +129,7 @@ export async function extractRecipeFromWebsite(url: string): Promise<ExtractedRe
     steps,
     ratingValue: null,
     reviewCount: null,
+    imageUrl: data.image?.startsWith('http') ? data.image : null,
     sourceNutrition: null,
   };
 }

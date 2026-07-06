@@ -9,6 +9,7 @@ create table if not exists recipes (
   steps         jsonb not null default '[]',   -- ordered array of step strings
   rating_value  numeric,                        -- from JSON-LD if present
   review_count  int,                            -- from JSON-LD if present
+  image_url     text,                           -- from JSON-LD/og:image if present
   created_at    timestamptz default now()
 );
 
