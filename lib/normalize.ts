@@ -46,6 +46,9 @@ const SYNONYMS: Record<string, string> = {
   'ground lamb': 'lamb mince',
   'ground turkey': 'turkey mince',
   'tomato paste': 'tomato paste', // identity entries keep lookups simple
+  'extra virgin olive oil': 'olive oil',
+  'extra-virgin olive oil': 'olive oil',
+  'evoo': 'olive oil',
   'romaine lettuce': 'cos lettuce',
   romaine: 'cos lettuce',
   'snow pea': 'snow peas',
