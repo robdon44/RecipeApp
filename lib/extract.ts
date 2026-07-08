@@ -185,6 +185,18 @@ export function extractFromJsonLd(html: string, url: string): ExtractedRecipe | 
 
 /* ---------------- Social (LLM) path ---------------- */
 
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#x2F;/g, '/')
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)));
+}
+
 /** Pull caption-ish text out of a social post page: og meta tags + title. */
 function extractSocialText(html: string): string {
   const pieces: string[] = [];
@@ -195,18 +207,86 @@ function extractSocialText(html: string): string {
   const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   if (title) pieces.push(title[1]);
   return [...new Set(pieces)]
-    .map((s) =>
-      s
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"')
-        .replace(/&#0?39;|&apos;/g, "'")
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&#x2F;/g, '/')
-        .trim()
-    )
+    .map((s) => decodeEntities(s).trim())
     .filter(Boolean)
     .join('\n\n');
+}
+
+/** Strip an HTML document down to its visible text. */
+function htmlToText(html: string): string {
+  return decodeEntities(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(?:p|div|li|h\d|section)>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+  )
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .trim();
+}
+
+/**
+ * Instagram serves an embed variant of every public post (built for website
+ * iframes) that includes the caption and is far less login-walled than the
+ * post page itself.
+ */
+async function fetchInstagramEmbed(
+  url: string
+): Promise<{ text: string; imageUrl: string | null } | null> {
+  const shortcode = url.match(/\/(?:reels?|p|tv)\/([A-Za-z0-9_-]+)/)?.[1];
+  if (!shortcode) return null;
+  try {
+    const html = await fetchHtml(`https://www.instagram.com/p/${shortcode}/embed/captioned/`);
+    const caption = html.match(/<div[^>]+class\s*=\s*["'][^"']*Caption[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+    const image = html.match(/<img[^>]+class\s*=\s*["'][^"']*EmbeddedMediaImage[^"']*["'][^>]+src\s*=\s*["']([^"']+)["']/i);
+    const text = htmlToText(caption ? caption[1] : html);
+    if (!text) return null;
+    return { text, imageUrl: image ? decodeEntities(image[1]) : null };
+  } catch {
+    return null;
+  }
+}
+
+/** TikTok's official public oEmbed API returns the caption as `title`. */
+async function fetchTikTokOembed(
+  url: string
+): Promise<{ text: string; imageUrl: string | null } | null> {
+  try {
+    const res = await fetch(
+      `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
+      { headers: FETCH_HEADERS }
+    );
+    if (!res.ok) return null;
+    const data: { title?: string; author_name?: string; thumbnail_url?: string } =
+      await res.json();
+    if (!data.title) return null;
+    return {
+      text: [data.author_name, data.title].filter(Boolean).join(': '),
+      imageUrl: data.thumbnail_url ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Last-resort content fetch through Tavily's extractor. */
+async function tavilyExtract(url: string): Promise<string | null> {
+  const apiKey = process.env.TAVILY_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch('https://api.tavily.com/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ urls: [url] }),
+    });
+    if (!res.ok) return null;
+    const data: { results?: Array<{ raw_content?: string }> } = await res.json();
+    return data.results?.[0]?.raw_content?.trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 const LLM_PROMPT = `Extract the recipe from the social-media post text below.
@@ -280,12 +360,36 @@ export async function extractRecipe(url: string): Promise<ExtractedRecipe | null
     return extractRecipeFromWebsite(url);
   }
 
-  // Instagram / TikTok: caption text → LLM structuring. (Video-audio
-  // transcription is milestone M6 — deliberately not built yet.)
-  const html = await fetchHtml(url);
-  const text = extractSocialText(html);
-  if (!text) return null;
-  const llm = await structureWithLlm(text);
+  // Instagram / TikTok: caption text → LLM structuring. Both platforms
+  // login-wall direct fetches from datacenter IPs, so gather text from every
+  // available door: the post page, the platform's embed/oEmbed surface, and
+  // finally Tavily's extractor. (Video-audio transcription is milestone M6 —
+  // deliberately not built yet.)
+  const pieces: string[] = [];
+  let imageUrl: string | null = null;
+
+  try {
+    const html = await fetchHtml(url);
+    pieces.push(extractSocialText(html));
+    imageUrl = extractOgImage(html);
+  } catch {
+    // login wall / block — the embed strategies below don't need the page
+  }
+
+  const embed =
+    sourceType === 'tiktok' ? await fetchTikTokOembed(url) : await fetchInstagramEmbed(url);
+  if (embed) {
+    pieces.push(embed.text);
+    imageUrl = imageUrl ?? embed.imageUrl;
+  }
+
+  let text = [...new Set(pieces.filter(Boolean))].join('\n\n');
+  let llm = text ? await structureWithLlm(text) : null;
+
+  if (!llm || llm.ingredients.length === 0) {
+    text = (await tavilyExtract(url)) ?? '';
+    llm = text ? await structureWithLlm(text) : null;
+  }
   if (!llm || llm.ingredients.length === 0) return null;
 
   return {
@@ -297,7 +401,7 @@ export async function extractRecipe(url: string): Promise<ExtractedRecipe | null
     steps: llm.steps ?? [],
     ratingValue: null,
     reviewCount: null,
-    imageUrl: extractOgImage(html),
+    imageUrl,
     sourceNutrition: null,
   };
 }
