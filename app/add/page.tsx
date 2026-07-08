@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { MIN_RATING_VALUE, MIN_REVIEW_COUNT } from '@/lib/config';
 
 interface DiscoverOutcome {
   added: Array<{ url: string; title: string; recipeId: string }>;
@@ -109,7 +110,8 @@ export default function AddPage() {
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">Discover popular recipes</h2>
         <p className="text-sm text-neutral-600">
-          Searches the web and auto-saves recipes rated ≥4.3 with 50+ reviews.
+          Searches the web and auto-saves recipes rated ≥{MIN_RATING_VALUE} with{' '}
+          {MIN_REVIEW_COUNT}+ reviews.
         </p>
         <form onSubmit={discover} className="flex gap-2">
           <input
