@@ -291,8 +291,15 @@ async function tavilyExtract(url: string): Promise<string | null> {
 
 const LLM_PROMPT = `Extract the recipe from the social-media post text below.
 Respond with JSON ONLY — no markdown fences, no preamble, no trailing text.
-Schema: { "title": string, "servings": number, "ingredients": string[], "steps": string[] }
+Schema: {
+  "title": string,
+  "servings": number,
+  "ingredients": string[],
+  "steps": string[],
+  "nutrition": { "calories": number|null, "protein_g": number|null, "carbs_g": number|null, "fat_g": number|null } | null
+}
 "ingredients" must be the raw ingredient lines as written (quantities included).
+"nutrition" must be non-null ONLY when the text explicitly states calorie/macro numbers — never estimate them yourself. Values must be PER SERVING: if the text gives whole-recipe totals, divide by servings. Omit any macro the text doesn't state as null.
 If a field is unknown use: servings 1, steps []. If there is NO recipe in the text, respond exactly with: null`;
 
 interface LlmRecipe {
@@ -300,6 +307,12 @@ interface LlmRecipe {
   servings: number;
   ingredients: string[];
   steps: string[];
+  nutrition?: {
+    calories: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+  } | null;
 }
 
 function parseLlmJson(text: string): LlmRecipe | null {
@@ -392,6 +405,17 @@ export async function extractRecipe(url: string): Promise<ExtractedRecipe | null
   }
   if (!llm || llm.ingredients.length === 0) return null;
 
+  const n = llm.nutrition;
+  const sourceNutrition =
+    n && [n.calories, n.protein_g, n.carbs_g, n.fat_g].some((v) => typeof v === 'number')
+      ? {
+          calories: typeof n.calories === 'number' ? n.calories : null,
+          protein_g: typeof n.protein_g === 'number' ? n.protein_g : null,
+          carbs_g: typeof n.carbs_g === 'number' ? n.carbs_g : null,
+          fat_g: typeof n.fat_g === 'number' ? n.fat_g : null,
+        }
+      : null;
+
   return {
     title: llm.title,
     sourceUrl: url,
@@ -402,6 +426,6 @@ export async function extractRecipe(url: string): Promise<ExtractedRecipe | null
     ratingValue: null,
     reviewCount: null,
     imageUrl,
-    sourceNutrition: null,
+    sourceNutrition,
   };
 }
