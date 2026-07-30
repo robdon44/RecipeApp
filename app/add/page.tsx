@@ -1,38 +1,22 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { MIN_RATING_VALUE, MIN_REVIEW_COUNT } from '@/lib/config';
-import type { ExtractedRecipe } from '@/lib/types';
-import RecipePreviewCard from './RecipePreviewCard';
 
 interface DiscoverOutcome {
   added: Array<{ url: string; title: string; recipeId: string }>;
   skipped: Array<{ url: string; reason: string }>;
 }
 
-type ImportState =
-  | { phase: 'idle' }
-  | { phase: 'extracting' }
-  | {
-      phase: 'preview';
-      extracted: ExtractedRecipe;
-      expanded: boolean;
-      saving: boolean;
-      error: string | null;
-    }
-  | { phase: 'exists'; recipeId: string }
-  | { phase: 'saved'; recipeId: string; deduped: boolean }
-  | { phase: 'error'; message: string };
-
 export default function AddPage() {
   const [url, setUrl] = useState('');
-  const [importState, setImportState] = useState<ImportState>({ phase: 'idle' });
-  // Keyboard stays suppressed (inputMode="none") until clipboard access
-  // fails and the user has to type/long-press paste instead.
-  const [manualEntry, setManualEntry] = useState(false);
-  const [pasteHint, setPasteHint] = useState<string | null>(null);
-  const urlInputRef = useRef<HTMLInputElement>(null);
+  const [ingesting, setIngesting] = useState(false);
+  const [ingestResult, setIngestResult] = useState<
+    | { kind: 'ok'; recipeId: string; deduped: boolean }
+    | { kind: 'error'; message: string }
+    | null
+  >(null);
 
   const [query, setQuery] = useState('');
   const [discovering, setDiscovering] = useState(false);
@@ -40,72 +24,30 @@ export default function AddPage() {
     DiscoverOutcome | { error: string } | null
   >(null);
 
-  async function pasteUrl() {
-    setPasteHint(null);
-    try {
-      if (!navigator.clipboard?.readText) throw new Error('Clipboard unavailable');
-      const text = (await navigator.clipboard.readText()).trim();
-      // Share sheets often copy "Check this out https://…" — keep just the URL.
-      const match = text.match(/https?:\/\/\S+/);
-      setUrl(match ? match[0] : text);
-      setImportState({ phase: 'idle' });
-    } catch {
-      setManualEntry(true);
-      setPasteHint('Clipboard unavailable — paste into the field instead.');
-      urlInputRef.current?.focus();
-    }
-  }
-
-  async function preview(e: React.FormEvent) {
+  async function ingest(e: React.FormEvent) {
     e.preventDefault();
-    setImportState({ phase: 'extracting' });
-    try {
-      const res = await fetch(`/api/ingest?url=${encodeURIComponent(url)}`);
-      const data = await res.json();
-      if (!res.ok) {
-        setImportState({
-          phase: 'error',
-          message: data.reason ?? data.error ?? `Failed (${res.status})`,
-        });
-      } else if (data.existingId) {
-        setImportState({ phase: 'exists', recipeId: data.existingId });
-      } else {
-        setImportState({
-          phase: 'preview',
-          extracted: data.extracted,
-          expanded: false,
-          saving: false,
-          error: null,
-        });
-      }
-    } catch (err) {
-      setImportState({
-        phase: 'error',
-        message: err instanceof Error ? err.message : 'Request failed',
-      });
-    }
-  }
-
-  async function save() {
-    if (importState.phase !== 'preview') return;
-    const { extracted } = importState;
-    setImportState({ ...importState, saving: true, error: null });
+    setIngesting(true);
+    setIngestResult(null);
     try {
       const res = await fetch('/api/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, extracted }),
+        body: JSON.stringify({ url }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Failed (${res.status})`);
-      setImportState({ phase: 'saved', recipeId: data.recipeId, deduped: !!data.deduped });
-      setUrl('');
+      if (!res.ok) {
+        setIngestResult({ kind: 'error', message: data.error ?? `Failed (${res.status})` });
+      } else {
+        setIngestResult({ kind: 'ok', recipeId: data.recipeId, deduped: !!data.deduped });
+        setUrl('');
+      }
     } catch (err) {
-      setImportState({
-        ...importState,
-        saving: false,
-        error: err instanceof Error ? err.message : 'Save failed',
+      setIngestResult({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Request failed',
       });
+    } finally {
+      setIngesting(false);
     }
   }
 
@@ -135,83 +77,33 @@ export default function AddPage() {
         <p className="text-sm text-neutral-600">
           Paste any recipe page, Instagram or TikTok post URL.
         </p>
-        <form onSubmit={preview} className="flex gap-2">
+        <form onSubmit={ingest} className="flex gap-2">
           <input
-            ref={urlInputRef}
             type="url"
             required
             value={url}
-            inputMode={manualEntry ? 'url' : 'none'}
-            onChange={(e) => {
-              setUrl(e.target.value);
-              // A different URL invalidates any preview/result on screen.
-              setImportState({ phase: 'idle' });
-            }}
+            onChange={(e) => setUrl(e.target.value)}
             placeholder="https://…"
-            className="min-w-0 flex-1 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
+            className="flex-1 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
           />
-          <button
-            type="button"
-            onClick={pasteUrl}
-            className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-600 hover:border-neutral-500"
-          >
-            Paste
-          </button>
           <button
             type="submit"
-            disabled={importState.phase === 'extracting'}
+            disabled={ingesting}
             className="rounded-md bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
           >
-            {importState.phase === 'extracting' ? 'Fetching…' : 'Preview'}
+            {ingesting ? 'Capturing…' : 'Capture'}
           </button>
         </form>
-        {pasteHint && <p className="text-xs text-neutral-500">{pasteHint}</p>}
-        {importState.phase === 'extracting' && (
-          <p className="text-sm text-neutral-500">
-            Fetching and extracting the recipe — social posts can take a little longer…
-          </p>
-        )}
-        {importState.phase === 'preview' && (
-          <RecipePreviewCard
-            key={url}
-            extracted={importState.extracted}
-            expanded={importState.expanded}
-            saving={importState.saving}
-            error={importState.error}
-            onToggle={() =>
-              setImportState({ ...importState, expanded: !importState.expanded })
-            }
-            onEdit={(patch) =>
-              setImportState({
-                ...importState,
-                extracted: { ...importState.extracted, ...patch },
-              })
-            }
-            onSave={save}
-            onCancel={() => {
-              setUrl('');
-              setImportState({ phase: 'idle' });
-            }}
-          />
-        )}
-        {importState.phase === 'exists' && (
+        {ingestResult?.kind === 'ok' && (
           <p className="rounded-md bg-green-50 p-3 text-sm text-green-800">
-            Already saved.{' '}
-            <Link href={`/recipe/${importState.recipeId}`} className="underline">
+            {ingestResult.deduped ? 'Already saved. ' : 'Recipe captured! '}
+            <Link href={`/recipe/${ingestResult.recipeId}`} className="underline">
               View it
             </Link>
           </p>
         )}
-        {importState.phase === 'saved' && (
-          <p className="rounded-md bg-green-50 p-3 text-sm text-green-800">
-            {importState.deduped ? 'Already saved. ' : 'Recipe saved! '}
-            <Link href={`/recipe/${importState.recipeId}`} className="underline">
-              View it
-            </Link>
-          </p>
-        )}
-        {importState.phase === 'error' && (
-          <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{importState.message}</p>
+        {ingestResult?.kind === 'error' && (
+          <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{ingestResult.message}</p>
         )}
       </section>
 
